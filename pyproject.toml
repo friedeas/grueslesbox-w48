@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grueslesbox"
+authors = [
+  { name="friedeas", email="friedeas@googlemail.com" },
+]
+description = "An audio guestbook project built with a vintage W48 Bakelite telephone, powered by a Raspberry Pi Zero"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License (Apache-2.0)",
+    "Operating System :: POSIX :: Linux",
+]
+dependencies = [
+    "rpi-lgpio >= 0.6",    
+    "python-statemachine >= 2.5.0",
+    "simpleaudio >= 1.0.4",
+    "PyOgg >= 0.6.14a1",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/friedeas/grueslesbox-w48"
+Issues = "https://github.com/friedeas/grueslesbox-w48/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]  # list of folders that contain the packages
+
+[tool.setuptools.dynamic]
+version = {attr = "grueslesbox.__version__"}
+
+[project.scripts]
+start_grueslesbox = "grueslesbox.phone_controller:main"
