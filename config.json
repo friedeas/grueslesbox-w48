@@ -1,0 +1,4 @@
+{
+  "_comment": "Accepted values for 'mode': 'record' (recording mode) or 'playback' (jukebox playback mode)",
+  "mode": "playback"
+}

@@ -1,3 +1,4 @@
+import json
 import logging
 from pathlib import Path
 import subprocess
@@ -26,19 +27,67 @@ BEEP_FILE = AUDIO_DIR / "beep.wav"
 RECORDINGS_DIR = BASE_DIR / "recordings"
 RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Configuration & State tracking files
+CONFIG_FILE = BASE_DIR / "config.json"
+STATE_FILE = BASE_DIR / "playback_state.json"
+
+
+def get_current_mode():
+    """Reads the mode from config.json, fallback is 'record'."""
+    if not CONFIG_FILE.exists():
+        return "record"
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            data = json.load(f)
+            return data.get("mode", "record")
+    except Exception as e:
+        logger.warning(f"Failed to read config.json, falling back to 'record': {e}")
+        return "record"
+
+
+def get_next_recording_index(total_files):
+    """Loads current playback index, calculates next with automatic wrap-around, saves state, and returns current."""
+    index = 0
+    if STATE_FILE.exists():
+        try:
+            with open(STATE_FILE, "r") as f:
+                data = json.load(f)
+                index = data.get("last_index", 0)
+        except Exception:
+            index = 0
+    
+    # Ensure index is within valid bounds
+    if total_files > 0:
+        if index >= total_files:
+            index = 0
+        next_index = (index + 1) % total_files
+    else:
+        next_index = 0
+    
+    # Save next state
+    try:
+        with open(STATE_FILE, "w") as f:
+            json.dump({"last_index": next_index}, f)
+    except Exception as e:
+        logger.error(f"Failed to save playback state: {e}")
+        
+    return index
+
 
 class PhoneStateMachine(StateMachine):
-    """State machine for the W48 audio guestbook."""
+    """State machine for the W48 audio guestbook / jukebox."""
 
     # Define states
     idle = State(initial=True)
     greeting = State()
     recording = State()
+    playback = State()
 
-    # Define transitions (allowing pick_up from greeting as well to prevent errors on rapid toggle)
-    pick_up = idle.to(greeting) | greeting.to(greeting) | recording.to(greeting)
+    # Define transitions
+    pick_up = idle.to(greeting) | greeting.to(greeting) | recording.to(greeting) | playback.to(greeting)
     start_recording = greeting.to(recording)
-    hang_up = recording.to(idle) | greeting.to(idle) | idle.to(idle)
+    start_playback = greeting.to(playback)
+    hang_up = recording.to(idle) | greeting.to(idle) | playback.to(idle) | idle.to(idle)
 
     def __init__(self, *args, **kwargs):
         self.current_process = None
@@ -49,7 +98,6 @@ class PhoneStateMachine(StateMachine):
 
     def _stop_current_process(self):
         """Immediately stops any running audio playback or recording process cleanly."""
-        # Signal the playback thread to stop if active
         self.playback_stop_event.set()
 
         proc = self.current_process
@@ -83,54 +131,94 @@ class PhoneStateMachine(StateMachine):
         if not filepath.exists():
             return True
 
-        # Explicitly pass the sound card device (-D plughw:1,0) just like arecord
         self.current_process = subprocess.Popen(
             ["aplay", "-D", "plughw:1,0", str(filepath)], 
             stderr=subprocess.DEVNULL
         )
 
-        # Wait for either the process to finish OR the stop event to be triggered by a hang-up.
         while self.current_process and self.current_process.poll() is None:
             if self.playback_stop_event.wait(timeout=0.1):
                 self._stop_current_process()
                 return False
 
-        return self.current_state == self.greeting
+        return True
 
     def on_enter_greeting(self):
-        logger.info(f"State: GREETING (Handset lifted, playing greeting from {GREETING_FILE})")
+        mode = get_current_mode()
+        logger.info(f"State: GREETING (Handset lifted, active mode: '{mode}')")
         self.playback_stop_event.clear()
 
-        def run_greeting_sequence():
+        def run_sequence():
             try:
-                # Play greeting audio
-                if not self._play_audio_blocking(GREETING_FILE):
-                    return
-
-                # Play beep tone if file exists
-                if BEEP_FILE.exists() and self.current_state == self.greeting:
-                    if not self._play_audio_blocking(BEEP_FILE):
+                if mode == "playback":
+                    if self.current_state == self.greeting:
+                        self.start_playback()
+                else:
+                    if not self._play_audio_blocking(GREETING_FILE):
                         return
 
-                # If still in greeting state after playback finishes, transition to recording
-                if self.current_state == self.greeting:
-                    self.start_recording()
+                    if BEEP_FILE.exists() and self.current_state == self.greeting:
+                        if not self._play_audio_blocking(BEEP_FILE):
+                            return
+
+                    if self.current_state == self.greeting:
+                        self.start_recording()
 
             except Exception as e:
-                logger.error(f"Error during greeting phase: {e}")
+                logger.error(f"Error during greeting sequence: {e}")
                 self.hang_up()
 
-        # Run the playback sequence in a background thread so the GPIO event handler remains instantly responsive
-        self.playback_thread = threading.Thread(target=run_greeting_sequence)
+        self.playback_thread = threading.Thread(target=run_sequence)
+        self.playback_thread.start()
+
+    def on_enter_playback(self):
+        logger.info("State: PLAYBACK (Starting continuous message playback)")
+        self.playback_stop_event.clear()
+
+        def run_playback_sequence():
+            try:
+                recordings = sorted(list(RECORDINGS_DIR.glob("*.wav")))
+                if not recordings:
+                    logger.info("No recordings found to play back.")
+                    return
+
+                is_first_in_session = True
+
+                # Loop continuously as long as the handset remains lifted (in playback state)
+                while self.current_state == self.playback:
+                    file_index = get_next_recording_index(len(recordings))
+
+                    # Play beep tone between messages (not for the very first file of this session)
+                    if not is_first_in_session and BEEP_FILE.exists():
+                        if not self._play_audio_blocking(BEEP_FILE):
+                            break
+
+                    current_file = recordings[file_index]
+                    logger.info(f"Playing message {file_index + 1} of {len(recordings)}: {current_file.name}")
+
+                    if not self._play_audio_blocking(current_file):
+                        break
+
+                    is_first_in_session = False
+                    
+                    # Small pause between messages if desired, or let it flow directly
+                    time.sleep(0.5)
+
+            except Exception as e:
+                logger.error(f"Error during playback sequence: {e}")
+            finally:
+                if self.current_state == self.playback:
+                    self.hang_up()
+
+        self.playback_thread = threading.Thread(target=run_playback_sequence)
         self.playback_thread.start()
 
     def on_enter_recording(self):
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         self.current_recording_file = RECORDINGS_DIR / f"recording_{timestamp}.wav"
-        logger.info(f"State: RECORDING (Saving to: {self.current_recording_file})")
+        logger.info(f"State: RECORDING (Saving to: {self.current_recording_file.name})")
 
         try:
-            # Start audio recording
             self.current_process = subprocess.Popen([
                 "arecord",
                 "-D", "plughw:1,0",
@@ -157,18 +245,20 @@ def handle_hook_state_change(channel, box):
 
 def main():
     logger.info("Starting Grueslesbox W48 controller...")
+    
+    # Log the currently active mode right at startup
+    active_mode = get_current_mode()
+    logger.info(f"Configuration loaded -> Active mode: '{active_mode}'")
 
     # GPIO Setup
     GPIO.setmode(GPIO.BCM)
     GPIO.setup(HOOK_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     GPIO.setup(LED_PIN, GPIO.OUT)
     
-    # Turn on the green LED to indicate the program has successfully started
     GPIO.output(LED_PIN, GPIO.HIGH)
 
     box = PhoneStateMachine()
 
-    # Initialize hook switch event listener (using both edges with bouncetime)
     GPIO.add_event_detect(
         HOOK_PIN, 
         GPIO.BOTH, 
@@ -177,7 +267,6 @@ def main():
     )
 
     try:
-        # Keep the main thread alive while events handle the state machine
         while True:
             time.sleep(1)
 
