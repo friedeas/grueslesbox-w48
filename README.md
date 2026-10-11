@@ -9,12 +9,12 @@ An interactive audio guestbook and jukebox project built into a vintage W48 Bake
 <table>
   <tr>
     <td align="center" width="33%"><a href="assets/images/grueslesbox-w48.jpg"><img src="assets/images/grueslesbox-w48.jpg" width="220" alt="Main View"></a><br><b>Grueslesbox W48</b></td>
-    <td align="center" width="33%"><a href="assets/images/grueslesbox-w48-part-assembled.jpg"><img src="assets/images/grueslesbox-w48-part-assembled.JPG" width="220" alt="Part Assembled"></a><br><b>Partially Assembled</b></td>
+    <td align="center" width="33%"><a href="assets/images/grueslesbox-w48-part-assembled.jpg"><img src="assets/images/grueslesbox-w48-part-assembled.jpg" width="220" alt="Part Assembled"></a><br><b>Partially Assembled</b></td>
     <td align="center" width="33%"><a href="assets/images/grueslesbox-w48-usb-c.jpg"><img src="assets/images/grueslesbox-w48-usb-c.jpg" width="220" alt="USB-C"></a><br><b>USB-C Integration</b></td>
   </tr>
   <tr>
     <td align="center" width="33%"><a href="assets/images/grueslesbox-w48-wo-case.jpg"><img src="assets/images/grueslesbox-w48-wo-case.jpg" width="220" alt="Internals"></a><br><b>Internals</b></td>
-    <td align="center" width="33%"><a href="assets/images/mce401_mic_mount.jpg"><img src="assets/images/mce401-mic-mount.jpg" width="220" alt="Mic Mount"></a><br><b>MCE-401 Mic Mount</b></td>
+    <td align="center" width="33%"><a href="assets/images/mce401-mic-mount.jpg"><img src="assets/images/mce401-mic-mount.jpg" width="220" alt="Mic Mount"></a><br><b>MCE-401 Mic Mount</b></td>
     <td align="center" width="33%"></td>
   </tr>
 </table>
