@@ -12,7 +12,6 @@ An interactive audio guestbook and jukebox project built into a vintage W48 Bake
   - **Record Mode (`record`):** Functions as a classic audio guestbook. Lifting the handset plays a welcome greeting (`greeting.wav`), followed by a beep (`beep.wav`), and then records the guest's message via the built-in electret microphone.
   - **Jukebox Mode (`playback`):** Acts as an interactive playback device. Lifting the handset continuously loops through all recorded guest messages, separated by a beep tone between tracks, allowing you to listen to all messages over and over again.
 - **Hardware Hook Integration:** Direct control via the original mechanical hook switch using Raspberry Pi GPIO pins.
-- **Clean Audio Architecture:** Designed with galvanic isolation components to prevent ground loops and humming noises.
 - **Automated State Persistence:** Automatically tracks the current playback index (`playback_state.json`) for seamless continuous listening across sessions.
 
 ---
@@ -23,6 +22,7 @@ An interactive audio guestbook and jukebox project built into a vintage W48 Bake
 - **Microphone:** MCE-401 electret microphone capsule with a custom 3D-printed mount.
 - **Controller:** Raspberry Pi Zero.
 - **Audio Interface:** LogiLink UA0078 USB audio adapter.
+- **Power / USB-C Integration:** Custom USB-C port integration for power delivery, built with insights from this [USB-C Introduction for Hackers](https://hackaday.com/2022/12/06/usb-c-introduction-for-hackers/) article.
 - **Enclosure / Mounts:** Custom 3D-printed structural components (PETG).
 
 ---
@@ -36,25 +36,46 @@ The `assets/3d_models/` directory contains all custom-designed parts for 3D prin
 
 ---
 
+## Audio Setup & Troubleshooting Tips
+
+When retrofitting vintage telephones with modern USB audio adapters and a Raspberry Pi, ground loops and power line interference can introduce unwanted hum or noise into recordings. To prevent this, you can use a floating power source (such as an ungrounded USB Power Bank) or implement one of the following hardware solutions:
+
+### Option 1: USB Isolator (The Plug & Play Solution)
+- **Cost:** Approx. 10 to 15 Euros (e.g., models using the ADuM3160 chip).
+- **Space Requirements & Space-Saving Trick:** Out of the box, a standard USB isolator with cables and the LogiLink stick can be quite bulky for the W48 shell. However, by removing the plastic enclosures of both the USB isolator and the LogiLink stick, you are left with two tiny circuit boards. Solder them directly together using short wires (`GND`, `5V`, `D+`, `D-`) and wrap them in transparent heat-shrink tubing. This allows you to mount the setup extremely compactly inside the phone.
+
+### Option 2: Audio Transformer with Bias Circuit (The Compact Electronics Solution)
+- **Cost:** Very affordable, under 10 Euros. A ready-made "Ground Loop Isolator" (with audio jacks) costs approx. 8 Euros, while bare 1:1 audio transformers (600 Ohm) cost only 1 to 3 Euros each (plus cent-priced resistors and capacitors).
+- **Space Requirements:** Minimal. Stripping a Ground Loop Isolator of its plastic case reveals two tiny transformers (about the size of a sugar cube). Combined with a tiny stripboard (e.g., 2x2 cm), the complete circuit easily fits somewhere next to the W48 cradle mechanism.
+- **Circuit Design & Bias Setup:** Since transformers block DC voltage, the MCE-401 capsule requires an independent power supply (bias circuit):
+  1. Tap 3.3V from the Raspberry Pi Zero (Pin 1 or 17).
+  2. Connect a pull-up/series resistor (approx. 2.2 kOhm to 4.7 kOhm) from the 3.3V line to the positive terminal of the microphone capsule.
+  3. Connect the Pi's ground (`GND`) to the negative terminal of the capsule.
+  4. Route the audio signal from the capsule's positive terminal through a coupling capacitor (e.g., 10 µF, positive side facing the capsule) into the primary side of the audio transformer (this filters out the DC voltage).
+  5. Connect the secondary side of the transformer directly to the microphone input of the LogiLink adapter.
+
+---
+
 ## Project Structure
 
-~/grueslesbox-w48/
-├── audio/                   # Audio files (greeting.wav, beep.wav)
-├── recordings/              # Recorded guest messages (.wav)
-├── src/                     # Python controller scripts
-├── assets/                  # Documentation, schematics, and 3D models
-│   ├── images/              # Photos of the build and hardware
-│   └── 3d_models/           # STL, 3MF, and Fusion 360 files
-├── config.json              # Mode configuration (record / playback)
-├── playback_state.json      # Persistent tracking for jukebox playback
-└── README.md
+- `~/grueslesbox-w48/`
+  - `audio/` - Audio files (`greeting.wav`, `beep.wav`)
+  - `recordings/` - Recorded guest messages (`.wav`)
+  - `src/` - Python controller scripts
+  - `assets/` - Documentation, schematics, and 3D models
+    - `images/` - Photos of the build and hardware
+    - `3d_models/` - STL, 3MF, and Fusion 360 files
+  - `config.json` - Mode configuration (`record` / `playback`)
+  - `playback_state.json` - Persistent tracking for jukebox playback
+  - `README.md`
 
 ---
 
 ## Configuration (`config.json`)
 
-The operating mode of the phone can be configured via the `config.json` file in the root directory by setting the "mode" key to either "record" or "playback":
+The operating mode of the phone can be configured via the `config.json` file in the root directory by setting the `mode` key to either `record` or `playback`:
 
+```json
 {
   "_comment": "Accepted values for 'mode': 'record' (recording mode) or 'playback' (jukebox playback mode)",
   "mode": "record"
