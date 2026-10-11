@@ -80,7 +80,7 @@ The operating mode of the phone can be configured via the `config.json` file in 
   "_comment": "Accepted values for 'mode': 'record' (recording mode) or 'playback' (jukebox playback mode)",
   "mode": "record"
 }
-
+```
 ---
 
 ## License
